@@ -1,0 +1,47 @@
+name: Deploy to Scaleway
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Deploy to Scaleway
+      uses: appleboy/ssh-action@v1.0.0
+      with:
+        host: ${{ secrets.SCALEWAY_HOST }}
+        username: ${{ secrets.SCALEWAY_USER }}
+        key: ${{ secrets.SCALEWAY_SSH_KEY }}
+        script: |
+          echo "Deploying to Scaleway..."
+
+          echo "------------------------------------"
+          
+          export NVM_DIR="$HOME/.nvm"
+          [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+          [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
+        
+          nvm use node
+
+          echo "------------------------------------"
+
+          echo "Pulling latest changes from GitHub..."
+          cd ~/rent-scrap
+          git fetch origin main
+          git reset --hard origin/main
+
+          echo "------------------------------------"
+          
+          echo "Installing dependencies..."
+          npm install
+
+          echo "------------------------------------"
+          
+          echo "Deployment completed!"
