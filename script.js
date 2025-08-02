@@ -2,7 +2,7 @@ import dotenv from "dotenv";
 import puppeteer from "puppeteer";
 import { Client, GatewayIntentBits } from "discord.js";
 
-dotenv.config();
+dotenv.config({ quiet: true });
 
 // Configuration du bot Discord
 const client = new Client({
@@ -16,6 +16,9 @@ const client = new Client({
 const url = new URL(
   "https://www.seloger.com/classified-search?distributionTypes=Rent&estateTypes=House,Apartment&locations=POCOFR4448&numberOfBedroomsMin=1&numberOfRoomsMin=2&priceMax=1300&spaceMin=55"
 );
+
+let scrapingInterval = null; // Pour stocker les intervals par channel
+let scrapingActive = false; // Pour savoir si le scraping est actif par channel
 
 async function criteria(channel) {
   // Extraction des paramètres de recherche de l'URL
@@ -149,6 +152,44 @@ async function displayResults(channel, adverts) {
   }
 }
 
+async function startAutoScraping(channel) {
+  if (scrapingActive) {
+    await channel.send("⚠️ **Le scraping automatique est déjà en cours !**");
+    return;
+  }
+
+  scrapingActive = true;
+
+  await channel.send(`
+🚀 **Démarrage du scraping automatique !**
+💡 **Utilisez \`!stop\` pour arrêter le scraping automatique.**
+  `);
+
+  // Premier scraping immédiat
+  await scrap(channel);
+
+  // Programmer les scraping suivants toutes les 5 minutes
+  scrapingInterval = setInterval(async () => {
+    await scrap(channel);
+  }, 5 * 60 * 1000); // 5 minutes
+}
+
+async function stopAutoScraping(channel) {
+  if (!scrapingActive) {
+    await channel.send("⚠️ **Aucun scraping automatique en cours.**");
+    return;
+  }
+
+  if (scrapingInterval) {
+    clearInterval(scrapingInterval);
+    scrapingInterval = null;
+  }
+
+  scrapingActive = false;
+
+  await channel.send("🛑 **Scraping automatique arrêté.**");
+}
+
 function startBot() {
   // Événement quand le bot est prêt
   client.once("ready", () => {
@@ -160,21 +201,36 @@ function startBot() {
     // Ignorer les messages du bot lui-même
     if (message.author.bot) return;
 
-    // Commande !scrap
-    if (message.content === "!scrap") {
-      await scrap(message.channel);
+    // Commande !scrapplz
+    if (message.content === "!scrapplz") {
+      await startAutoScraping(message.channel);
     }
 
-    if (message.content === "!criteria") {
+    // Commande !stopplz
+    if (message.content === "!stopplz") {
+      await stopAutoScraping(message.channel);
+    }
+
+    if (message.content === "!criteriastp") {
       await criteria(message.channel);
+    }
+
+    if (message.content === "!statusstp") {
+      if (scrapingActive) {
+        await message.channel.send("✅ **Scraping automatique ACTIF** - prochain scraping dans < 5 minutes");
+      } else {
+        await message.channel.send("❌ **Scraping automatique INACTIF**");
+      }
     }
 
     // Commande !help
     if (message.content === "!help") {
       await message.channel.send(`
 **Commandes disponibles:**
-- \`!scrap\`: Lancer le scraping des annonces.
-- \`!criteria\`: Afficher les critères de recherche.
+- \`!scrapplz\`: Lancer le scraping des annonces.
+- \`!stopplz\`: Arrêter le scraping automatique.
+- \`!criteriastp\`: Afficher les critères de recherche.
+- \`!statusstp\`: Afficher le statut du scraping automatique.
       `);
     }
   });
