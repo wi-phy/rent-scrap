@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Script pour scraper les annonces SeLoger",
   "main": "script.js",
+  "type": "module",
   "scripts": {
     "start": "node script.js",
     "dev": "node script.js"

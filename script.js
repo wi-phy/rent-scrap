@@ -1,18 +1,40 @@
-const puppeteer = require("puppeteer");
+import puppeteer from "puppeteer";
 
 async function scrapSeLoger() {
-  const url =
-    "https://www.seloger.com/classified-search?distributionTypes=Rent&estateTypes=House,Apartment&locations=POCOFR4448&numberOfBedroomsMin=1&numberOfRoomsMin=2&priceMax=1300&spaceMin=55";
+  const url = new URL(
+    "https://www.seloger.com/classified-search?distributionTypes=Rent&estateTypes=House,Apartment&locations=POCOFR4448&numberOfBedroomsMin=1&numberOfRoomsMin=2&priceMax=1300&spaceMin=55"
+  );
 
-  console.log("🚀 Démarrage du scraping SeLoger...");
-  console.log("📍 URL:", url);
+  console.log("Démarrage du scraping...");
+
+  // Extraction des paramètres de recherche de l'URL
+  const urlParams = url.searchParams;
+  const site = url.hostname;
+  const nbChambreMin = urlParams.get("numberOfBedroomsMin") || "N/A";
+  const nbPiecesMin = urlParams.get("numberOfRoomsMin") || "N/A";
+  const prixMax = urlParams.get("priceMax") || "N/A";
+  const surfaceMin = urlParams.get("spaceMin") || "N/A";
+
+  console.log("=".repeat(60));
+  console.log("CRITÈRES DE RECHERCHE:");
+  console.log(`Site: ${site}`);
+  console.log(`Nb de chambres min: ${nbChambreMin}`);
+  console.log(`Nb de pièces min: ${nbPiecesMin}`);
+  console.log(`Prix max: ${prixMax}€`);
+  console.log(`Surface min: ${surfaceMin}m²`);
+  console.log("=".repeat(60));
 
   let browser;
   try {
     // Lancement du navigateur
     browser = await puppeteer.launch({
-      headless: true, // Mettre à false pour voir le navigateur
-      args: ["--no-sandbox", "--disable-setuid-sandbox"],
+      headless: true,
+      args: [
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-gpu",
+      ],
     });
 
     const page = await browser.newPage();
@@ -24,7 +46,7 @@ async function scrapSeLoger() {
     await page.setViewport({ width: 1366, height: 768 });
 
     console.log("🔄 Chargement de la page...");
-    const res = await page.goto(url, {
+    const res = await page.goto(url.href, {
       waitUntil: "networkidle2",
       timeout: 30000,
     });
@@ -107,11 +129,4 @@ async function scrapSeLoger() {
   }
 }
 
-// Exécution du script
-if (require.main === module) {
-  console.log("🏠 SeLoger Scraper - Recherche d'appartements à louer");
-  console.log("=".repeat(60));
-  scrapSeLoger();
-}
-
-module.exports = { scrapSeLoger };
+scrapSeLoger();
