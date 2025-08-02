@@ -19,6 +19,7 @@ const url = new URL(
 
 let scrapingInterval = null; // Pour stocker les intervals par channel
 let scrapingActive = false; // Pour savoir si le scraping est actif par channel
+const results = []; // Pour stocker les résultats des annonces
 
 async function criteria(channel) {
   // Extraction des paramètres de recherche de l'URL
@@ -41,33 +42,48 @@ async function criteria(channel) {
 }
 
 async function scrap(channel) {
-  let browser;
+  console.log("🔄 Démarrage du scraping...");
+  let browserInstance;
   try {
-    const page = await loadPage();
+    const { page, browser } = await initBrowser();
+    browserInstance = browser;
     const adverts = await getAdverts(page);
-    await displayResults(channel, adverts);
+    removeDeletedAdverts(adverts);
+    const newAdverts = filterAdverts(adverts);
+    await displayResults(channel, newAdverts);
   } catch (error) {
     await channel.send(`❌ **Erreur lors du scraping:** ${error.message}`);
   } finally {
-    if (browser) {
-      await browser.close();
+    if (browserInstance) {
+      await browserInstance.close();
     }
   }
 }
 
-async function loadPage(browser) {
+async function initBrowser() {
   // Lancement du navigateur
-  browser = await puppeteer.launch({
+  const browser = await puppeteer.launch({
     headless: true,
     args: [
       "--no-sandbox",
       "--disable-setuid-sandbox",
       "--disable-dev-shm-usage",
       "--disable-gpu",
+      "--ignore-certificate-errors",
+      "--ignore-ssl-errors",
+      "--ignore-certificate-errors-spki-list",
+      "--disable-web-security",
+      "--allow-running-insecure-content",
     ],
   });
 
   const page = await browser.newPage();
+
+  // Ignorer les erreurs SSL au niveau de la page
+  await page.setRequestInterception(true);
+  page.on("request", (req) => {
+    req.continue();
+  });
 
   // Configuration de la page
   await page.setUserAgent(
@@ -75,20 +91,23 @@ async function loadPage(browser) {
   );
   await page.setViewport({ width: 1366, height: 768 });
 
-  await page.goto(url.href, {
+  const response = await page.goto(url.href, {
     waitUntil: "networkidle2",
     timeout: 30000,
   });
 
+  console.log(`✅ Page chargée - Status: ${response.status()}`);
+
   // Attendre que les annonces se chargent
-  await page.waitForSelector(
+  const sel = await page.waitForSelector(
     '[data-testid="serp-core-classified-card-testid"]',
     {
       timeout: 10000,
     }
   );
+  console.log(`${sel ? "✅ Elément trouvé" : "❌ Elément non trouvé"}`);
 
-  return page;
+  return { page, browser };
 }
 
 async function getAdverts(page) {
@@ -97,13 +116,16 @@ async function getAdverts(page) {
       '[data-testid="serp-core-classified-card-testid"]'
     );
     if (!cards.length) throw new Error("Aucune annonce trouvée");
-    const results = [];
+    const newResults = [];
 
     cards.forEach((card) => {
       try {
+        // Extraction du lien
+        const linkElement = card.querySelector("a[href]");
+        const link = linkElement ? linkElement.href : "";
+
         // Recherche du titre
         const titleElement = card.querySelector("a[title]");
-
         let title = "";
         if (titleElement) {
           title =
@@ -112,11 +134,7 @@ async function getAdverts(page) {
             "";
         }
 
-        // Extraction du lien
-        const linkElement = card.querySelector("a[href]");
-        const link = linkElement ? linkElement.href : "";
-
-        results.push({
+        newResults.push({
           title,
           link: link.startsWith("http")
             ? link
@@ -127,28 +145,56 @@ async function getAdverts(page) {
       }
     });
 
-    return results;
+    return newResults;
   });
 }
 
+function filterAdverts(adverts) {
+  return adverts.filter((ad) => {
+    if (results.some((result) => result.link === ad.link)) {
+      return false; // Annonce déjà existante, ne pas l'ajouter
+    }
+    results.push(ad); // Nouvelle annonce, ajouter à la liste
+    return true;
+  });
+}
+
+function removeDeletedAdverts(adverts) {
+  const initialCount = results.length;
+  const updatedResults = results.filter(result => 
+    adverts.some(ad => ad.link === result.link)
+  );
+  results.length = 0;
+  results.push(...updatedResults);
+  const updatedCount = results.length;
+  if (initialCount > updatedCount) {
+    console.log(`🗑️ ${initialCount - updatedCount} annonces supprimées.`);
+  }
+}
+
 async function displayResults(channel, adverts) {
+  if (!adverts || adverts.length === 0) {
+    console.log("Aucune nouvelle annonce trouvée.");
+    return; // Arrêter l'exécution si aucune annonce n'est trouvée
+  }
+
+  const isOneResult = adverts.length === 1;
   await channel.send(
-    `✅ **${adverts.length} appartements trouvés !** (limité à 3 pdt la phase de tests)`
+    `✅ **${adverts.length} ${
+      isOneResult
+        ? "nouvel appartement trouvé"
+        : "nouveaux appartements trouvés"
+    } !**`
   );
 
-  // Affichage des résultats
-  if (adverts.length > 0) {
-    const limit = 3; // a enlever
-    adverts.forEach(async (annonce, index) => {
-      if (index >= limit) return; // Limite le nombre d'annonces affichées
-      await channel.send(`
+  for (const [index, annonce] of adverts.entries()) {
+    await channel.send(`
 **${index + 1}.** ${annonce.title}
 🔗 ${annonce.link}
         `);
 
-      // Pause pour éviter les limites de Discord
-      await new Promise((resolve) => setTimeout(resolve, 200));
-    });
+    // Pause pour éviter les limites de Discord
+    await new Promise((resolve) => setTimeout(resolve, 200));
   }
 }
 
@@ -168,10 +214,10 @@ async function startAutoScraping(channel) {
   // Premier scraping immédiat
   await scrap(channel);
 
-  // Programmer les scraping suivants toutes les 5 minutes
+  // Programmer les scraping suivants toutes les 15 minutes
   scrapingInterval = setInterval(async () => {
     await scrap(channel);
-  }, 5 * 60 * 1000); // 5 minutes
+  }, 15 * 60 * 1000); // 15 minutes
 }
 
 async function stopAutoScraping(channel) {
@@ -217,7 +263,9 @@ function startBot() {
 
     if (message.content === "!statusstp") {
       if (scrapingActive) {
-        await message.channel.send("✅ **Scraping automatique ACTIF** - prochain scraping dans < 5 minutes");
+        await message.channel.send(
+          "✅ **Scraping automatique ACTIF** - prochain scraping dans < 15 minutes"
+        );
       } else {
         await message.channel.send("❌ **Scraping automatique INACTIF**");
       }
