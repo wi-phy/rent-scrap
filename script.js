@@ -122,7 +122,8 @@ async function getAdverts(page) {
       try {
         // Extraction du lien
         const linkElement = card.querySelector("a[href]");
-        const link = linkElement ? linkElement.href : "";
+        let link = linkElement ? linkElement.href : "";
+        link = link.split("?")[0]; // Nettoyer le lien pour enlever les paramètres
 
         // Recherche du titre
         const titleElement = card.querySelector("a[title]");

@@ -44,4 +44,17 @@ jobs:
 
           echo "------------------------------------"
           
+          echo "Stopping existing PM2 process..."
+          pm2 stop rent-scrap || echo "No existing process to stop"
+          pm2 delete rent-scrap || echo "No existing process to delete"
+
+          echo "------------------------------------"
+          
+          echo "Starting new PM2 process..."
+          pm2 start script.js --name rent-scrap
+          pm2 save
+          
+          echo "------------------------------------"
+          
           echo "Deployment completed!"
+          pm2 status
