@@ -13,43 +13,87 @@ const client = new Client({
   ],
 });
 
-const url = new URL(
-  "https://www.seloger.com/classified-search?distributionTypes=Rent&estateTypes=House,Apartment&locations=POCOFR4448&numberOfBedroomsMin=1&numberOfRoomsMin=2&priceMax=1300&spaceMin=55"
-);
+// Configurations des sites
+const siteConfigs = [
+  {
+    name: "SeLoger",
+    url: new URL(
+      "https://www.seloger.com/classified-search?distributionTypes=Rent&estateTypes=House,Apartment&locations=POCOFR4448&numberOfBedroomsMin=1&numberOfRoomsMin=2&priceMax=1300&spaceMin=55"
+    ),
+    baseUrl: "https://www.seloger.com",
+    selectors: {
+      card: '[data-testid="serp-core-classified-card-testid"]',
+      link: "a[href]",
+      title: "a[title]",
+    },
+    extractTitle: (card, titleSelector) => {
+      const titleElement = card.querySelector(titleSelector);
+      return titleElement ? titleElement.textContent?.trim() : "";
+    },
+    extractLink: (card, linkSelector) => {
+      const linkElement = card.querySelector(linkSelector);
+      return linkElement ? linkElement.href : "";
+    },
+  },
+  {
+    name: "Bienici",
+    url: new URL(
+      "https://www.bienici.com/recherche/location/lyon-4e-69004/2-pieces-et-plus?prix-max=1300&mode=liste"
+    ),
+    baseUrl: "https://www.bienici.com",
+    selectors: {
+      card: "article.search-results-list__ad-overview",
+      link: "a[href]",
+      title: "div.ad-overview-details",
+    },
+    extractTitle: (card, titleSelector) => {
+      const titleElement = card.querySelector(
+        `${titleSelector}.ad-overview-details__ad-title`
+      );
+      const priceElement = card.querySelector(
+        `${titleSelector}.ad-price__the-price`
+      );
+      const titleText = titleElement ? titleElement.textContent?.trim() : "";
+      const priceText = priceElement ? priceElement.textContent?.trim() : "";
+
+      return priceText + " - " + titleText;
+    },
+    extractLink: (card, linkSelector) => {
+      const linkElement = card.querySelector(linkSelector);
+      return linkElement ? linkElement.href : "";
+    },
+  },
+];
 
 let scrapingInterval = null; // Pour stocker les intervals par channel
 let scrapingActive = false; // Pour savoir si le scraping est actif par channel
 const results = []; // Pour stocker les résultats des annonces
 
-async function criteria(channel) {
-  // Extraction des paramètres de recherche de l'URL
-  const urlParams = url.searchParams;
-  const site = url.hostname;
-  const nbChambreMin = urlParams.get("numberOfBedroomsMin") || "N/A";
-  const nbPiecesMin = urlParams.get("numberOfRoomsMin") || "N/A";
-  const prixMax = urlParams.get("priceMax") || "N/A";
-  const surfaceMin = urlParams.get("spaceMin") || "N/A";
-
-  // Envoyer les critères de recherche sur Discord
-  await channel.send(`
-**📊 CRITÈRES DE RECHERCHE:**
-🌐 **Site:** ${site}
-🛏️ **Nb de chambres min:** ${nbChambreMin}
-🏠 **Nb de pièces min:** ${nbPiecesMin}
-💰 **Prix max:** ${prixMax}€
-📐 **Surface min:** ${surfaceMin}m²
-  `);
-}
-
 async function scrap(channel) {
   console.log("🔄 Démarrage du scraping...");
   let browserInstance;
   try {
-    const { page, browser } = await initBrowser();
+    const { browser } = await initBrowser();
     browserInstance = browser;
-    const adverts = await getAdverts(page);
-    removeDeletedAdverts(adverts);
-    const newAdverts = filterAdverts(adverts);
+
+    const allAdverts = [];
+
+    for (const config of siteConfigs) {
+      try {
+        const page = await browser.newPage();
+        await configurePage(page, config);
+        const adverts = await getAdverts(page, config);
+        allAdverts.push(...adverts);
+        await page.close();
+      } catch (error) {
+        console.error(
+          `❌ Erreur lors du scraping de ${config.name}: ${error.message}`
+        );
+      }
+    }
+
+    removeDeletedAdverts(allAdverts);
+    const newAdverts = filterAdverts(allAdverts);
     await displayResults(channel, newAdverts);
   } catch (error) {
     await channel.send(`❌ **Erreur lors du scraping:** ${error.message}`);
@@ -77,8 +121,10 @@ async function initBrowser() {
     ],
   });
 
-  const page = await browser.newPage();
+  return { browser };
+}
 
+async function configurePage(page, config) {
   // Ignorer les erreurs SSL au niveau de la page
   await page.setRequestInterception(true);
   page.on("request", (req) => {
@@ -91,7 +137,7 @@ async function initBrowser() {
   );
   await page.setViewport({ width: 1366, height: 768 });
 
-  const response = await page.goto(url.href, {
+  const response = await page.goto(config.url.href, {
     waitUntil: "networkidle2",
     timeout: 30000,
   });
@@ -99,55 +145,52 @@ async function initBrowser() {
   console.log(`✅ Page chargée - Status: ${response.status()}`);
 
   // Attendre que les annonces se chargent
-  const sel = await page.waitForSelector(
-    '[data-testid="serp-core-classified-card-testid"]',
-    {
-      timeout: 10000,
-    }
-  );
+  const sel = await page.waitForSelector(config.selectors.card, {
+    timeout: 10000,
+  });
   console.log(`${sel ? "✅ Elément trouvé" : "❌ Elément non trouvé"}`);
-
-  return { page, browser };
 }
 
-async function getAdverts(page) {
-  return await page.evaluate(() => {
-    const cards = document.querySelectorAll(
-      '[data-testid="serp-core-classified-card-testid"]'
-    );
-    if (!cards.length) throw new Error("Aucune annonce trouvée");
-    const newResults = [];
+async function getAdverts(page, config) {
+  return await page.evaluate(
+    (config) => {
+      const cards = document.querySelectorAll(config.selectors.card);
+      if (!cards.length)
+        throw new Error(`Aucune annonce trouvée sur ${config.name}`);
+      const newResults = [];
 
-    cards.forEach((card) => {
-      try {
-        // Extraction du lien
-        const linkElement = card.querySelector("a[href]");
-        let link = linkElement ? linkElement.href : "";
-        link = link.split("?")[0]; // Nettoyer le lien pour enlever les paramètres
+      cards.forEach((card) => {
+        try {
+          // Extraction du titre
+          const title = config.extractTitle(card, config.titleSelector);
 
-        // Recherche du titre
-        const titleElement = card.querySelector("a[title]");
-        let title = "";
-        if (titleElement) {
-          title =
-            titleElement.textContent?.trim() ||
-            titleElement.getAttribute("title") ||
-            "";
+          // Extraction du lien
+          let link = config.extractLink(card, config.linkSelector);
+          link = link.split("?")[0]; // Nettoyer les paramètres
+
+          // S'assurer que le lien est complet
+          if (!link.startsWith("http")) {
+            link = `${config.baseUrl}${link}`;
+          }
+
+          newResults.push({
+            title,
+            link,
+            source: config.name,
+          });
+        } catch (error) {
+          console.error("Erreur lors de l'extraction d'une annonce:", error);
         }
+      });
 
-        newResults.push({
-          title,
-          link: link.startsWith("http")
-            ? link
-            : `https://www.seloger.com${link}`,
-        });
-      } catch (error) {
-        console.error("Erreur lors de l'extraction d'une annonce:", error);
-      }
-    });
-
-    return newResults;
-  });
+      return newResults;
+    },
+    {
+      ...config,
+      extractTitle: config.extractTitle.toString(),
+      extractLink: config.extractLink.toString(),
+    }
+  );
 }
 
 function filterAdverts(adverts) {
@@ -162,8 +205,8 @@ function filterAdverts(adverts) {
 
 function removeDeletedAdverts(adverts) {
   const initialCount = results.length;
-  const updatedResults = results.filter(result => 
-    adverts.some(ad => ad.link === result.link)
+  const updatedResults = results.filter((result) =>
+    adverts.some((ad) => ad.link === result.link)
   );
   results.length = 0;
   results.push(...updatedResults);
@@ -209,6 +252,7 @@ async function startAutoScraping(channel) {
 
   await channel.send(`
 🚀 **Démarrage du scraping automatique !**
+🌐 **Sites surveillés:** ${siteConfigs.map((config) => config.name).join(", ")}
 💡 **Utilisez \`!stop\` pour arrêter le scraping automatique.**
   `);
 
@@ -258,10 +302,6 @@ function startBot() {
       await stopAutoScraping(message.channel);
     }
 
-    if (message.content === "!criteriastp") {
-      await criteria(message.channel);
-    }
-
     if (message.content === "!statusstp") {
       if (scrapingActive) {
         await message.channel.send(
@@ -278,7 +318,6 @@ function startBot() {
 **Commandes disponibles:**
 - \`!scrapplz\`: Lancer le scraping des annonces.
 - \`!stopplz\`: Arrêter le scraping automatique.
-- \`!criteriastp\`: Afficher les critères de recherche.
 - \`!statusstp\`: Afficher le statut du scraping automatique.
       `);
     }
