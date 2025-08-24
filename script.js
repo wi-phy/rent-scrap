@@ -26,14 +26,6 @@ const siteConfigs = [
       link: "a[href]",
       title: "a[title]",
     },
-    extractTitle: (card, titleSelector) => {
-      const titleElement = card.querySelector(titleSelector);
-      return titleElement ? titleElement.textContent?.trim() : "";
-    },
-    extractLink: (card, linkSelector) => {
-      const linkElement = card.querySelector(linkSelector);
-      return linkElement ? linkElement.href : "";
-    },
   },
   {
     name: "Bienici",
@@ -44,23 +36,8 @@ const siteConfigs = [
     selectors: {
       card: "article.search-results-list__ad-overview",
       link: "a[href]",
-      title: "div.ad-overview-details",
-    },
-    extractTitle: (card, titleSelector) => {
-      const titleElement = card.querySelector(
-        `${titleSelector}.ad-overview-details__ad-title`
-      );
-      const priceElement = card.querySelector(
-        `${titleSelector}.ad-price__the-price`
-      );
-      const titleText = titleElement ? titleElement.textContent?.trim() : "";
-      const priceText = priceElement ? priceElement.textContent?.trim() : "";
-
-      return priceText + " - " + titleText;
-    },
-    extractLink: (card, linkSelector) => {
-      const linkElement = card.querySelector(linkSelector);
-      return linkElement ? linkElement.href : "";
+      title: ".ad-overview-details__ad-title",
+      price: ".ad-price__the-price",
     },
   },
 ];
@@ -148,47 +125,79 @@ async function configurePage(page, config) {
   const sel = await page.waitForSelector(config.selectors.card, {
     timeout: 10000,
   });
-  console.log(`${sel ? "✅ Elément trouvé" : "❌ Elément non trouvé"}`);
+  if (!sel) throw new Error(`❌ Éléments non trouvés pour ${config.name}`);
+  console.log("✅ Éléments trouvés");
 }
 
 async function getAdverts(page, config) {
   return await page.evaluate(
-    (config) => {
-      const cards = document.querySelectorAll(config.selectors.card);
+    (configData) => {
+      function extractTitleLinkSeLoger(card, configData) {
+        const titleElement = card.querySelector(configData.selectors.title);
+        title = titleElement ? titleElement.getAttribute("title") : "";
+
+        const linkElement = card.querySelector(configData.selectors.link);
+        link = linkElement ? linkElement.href : "";
+
+        if (link) {
+          link = `${configData.baseUrl}${link.split("?")[0]}`;
+        }
+
+        return { title, link };
+      }
+
+      function extractTitleLinkBienici(card, configData) {
+        const titleElement = card.querySelector(
+          `${configData.selectors.title}`
+        );
+        const priceElement = card.querySelector(
+          `${configData.selectors.price}`
+        );
+        const titleText = titleElement ? titleElement.textContent?.trim() : "";
+        const priceText = priceElement ? priceElement.textContent?.trim() : "";
+        title = priceText + " - " + titleText;
+
+        const linkElement = card.querySelector(configData.selectors.link);
+        link = linkElement ? linkElement.href : "";
+
+        if (link) {
+          link = `${configData.baseUrl}${link.split("?")[0]}`;
+        }
+
+        return { title, link };
+      }
+
+      const cards = document.querySelectorAll(configData.selectors.card);
       if (!cards.length)
-        throw new Error(`Aucune annonce trouvée sur ${config.name}`);
+        throw new Error(`Aucune annonce trouvée sur ${configData.name}`);
       const newResults = [];
 
       cards.forEach((card) => {
-        try {
-          // Extraction du titre
-          const title = config.extractTitle(card, config.titleSelector);
+        let data = {};
 
-          // Extraction du lien
-          let link = config.extractLink(card, config.linkSelector);
-          link = link.split("?")[0]; // Nettoyer les paramètres
-
-          // S'assurer que le lien est complet
-          if (!link.startsWith("http")) {
-            link = `${config.baseUrl}${link}`;
-          }
-
-          newResults.push({
-            title,
-            link,
-            source: config.name,
-          });
-        } catch (error) {
-          console.error("Erreur lors de l'extraction d'une annonce:", error);
+        // Extraction selon le site
+        switch (configData.name) {
+          case "SeLoger":
+            data = extractTitleLinkSeLoger(card, configData);
+            break;
+          case "Bienici":
+            data = extractTitleLinkBienici(card, configData);
+            break;
         }
+
+        newResults.push({
+          title: data.title,
+          link: data.link,
+          source: configData.name,
+        });
       });
 
       return newResults;
     },
     {
-      ...config,
-      extractTitle: config.extractTitle.toString(),
-      extractLink: config.extractLink.toString(),
+      name: config.name,
+      baseUrl: config.baseUrl,
+      selectors: config.selectors,
     }
   );
 }
@@ -327,3 +336,66 @@ function startBot() {
 startBot();
 
 client.login(process.env.DISCORD_TOKEN);
+
+// async function scrapDebug() {
+//   console.log("🔄 Démarrage du scraping...");
+//   let browserInstance;
+//   try {
+//     const { browser } = await initBrowser();
+//     browserInstance = browser;
+
+//     const allAdverts = [];
+
+//     for (const config of siteConfigs) {
+//       try {
+//         const page = await browser.newPage();
+//         await configurePage(page, config);
+//         const adverts = await getAdverts(page, config);
+//         allAdverts.push(...adverts);
+//         await page.close();
+//       } catch (error) {
+//         console.error(
+//           `❌ Erreur lors du scraping de ${config.name}: ${error.message}`
+//         );
+//       }
+//     }
+
+//     removeDeletedAdverts(allAdverts);
+//     const newAdverts = filterAdverts(allAdverts);
+//     await displayResultsDebug(newAdverts);
+//   } catch (error) {
+//     console.log(`❌ **Erreur lors du scraping:** ${error.message}`);
+//   } finally {
+//     if (browserInstance) {
+//       await browserInstance.close();
+//     }
+//   }
+// }
+
+// async function displayResultsDebug(adverts) {
+//   if (!adverts || adverts.length === 0) {
+//     console.log("Aucune nouvelle annonce trouvée.");
+//     return; // Arrêter l'exécution si aucune annonce n'est trouvée
+//   }
+
+//   const isOneResult = adverts.length === 1;
+//   console.log(
+//     `✅ **${adverts.length} ${
+//       isOneResult
+//         ? "nouvel appartement trouvé"
+//         : "nouveaux appartements trouvés"
+//     } !**`
+//   );
+
+//   for (const [index, annonce] of adverts.entries()) {
+//     console.log(`
+// **${index + 1}.** ${annonce.title}
+// 🔗 ${annonce.link}
+//         `);
+
+//     // Pause pour éviter les limites de Discord
+//     await new Promise((resolve) => setTimeout(resolve, 200));
+//   }
+// }
+
+// scrapDebug();
