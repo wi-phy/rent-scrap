@@ -20,7 +20,6 @@ const siteConfigs = [
     url: new URL(
       "https://www.seloger.com/classified-search?distributionTypes=Rent&estateTypes=House,Apartment&locations=POCOFR4448&numberOfBedroomsMin=1&numberOfRoomsMin=2&priceMax=1300&spaceMin=55"
     ),
-    baseUrl: "https://www.seloger.com",
     selectors: {
       card: '[data-testid="serp-core-classified-card-testid"]',
       link: "a[href]",
@@ -32,7 +31,6 @@ const siteConfigs = [
     url: new URL(
       "https://www.bienici.com/recherche/location/lyon-4e-69004/2-pieces-et-plus?prix-max=1300&mode=liste"
     ),
-    baseUrl: "https://www.bienici.com",
     selectors: {
       card: "article.search-results-list__ad-overview",
       link: "a[href]",
@@ -140,7 +138,7 @@ async function getAdverts(page, config) {
         link = linkElement ? linkElement.href : "";
 
         if (link) {
-          link = `${configData.baseUrl}${link.split("?")[0]}`;
+          link = `${link.split("?")[0]}`;
         }
 
         return { title, link };
@@ -161,7 +159,7 @@ async function getAdverts(page, config) {
         link = linkElement ? linkElement.href : "";
 
         if (link) {
-          link = `${configData.baseUrl}${link.split("?")[0]}`;
+          link = `${link.split("?")[0]}`;
         }
 
         return { title, link };
