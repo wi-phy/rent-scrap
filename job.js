@@ -99,7 +99,10 @@ const siteConfigs = [
   },
 ];
 
-const results = []; // Pour stocker les résultats des annonces
+const results = {
+  nice: [],
+  lyon: [],
+}; // Pour stocker les résultats des annonces
 
 export async function scrapJobs(channel, location) {
   console.log("🔄 Démarrage du scraping...");
@@ -110,7 +113,9 @@ export async function scrapJobs(channel, location) {
 
     const allAdverts = [];
 
-    for (const config of siteConfigs.filter((site) => site.location === location)) {
+    for (const config of siteConfigs.filter(
+      (site) => site.location === location
+    )) {
       try {
         const page = await browser.newPage();
 
@@ -129,7 +134,7 @@ export async function scrapJobs(channel, location) {
           const adverts = await getAdverts(page, config);
           allAdverts.push(...adverts);
           pageNumber++;
-        } while (pageNumber <= 9);
+        } while (pageNumber <= 5);
 
         await page.close();
       } catch (error) {
@@ -229,24 +234,24 @@ async function getAdverts(page, config) {
   );
 }
 
-function filterAdverts(adverts) {
+function filterAdverts(adverts, location) {
   return adverts.filter((ad) => {
-    if (results.some((result) => result.link === ad.link)) {
+    if (results[location].some((result) => result.link === ad.link)) {
       return false; // Annonce déjà existante, ne pas l'ajouter
     }
-    results.push(ad); // Nouvelle annonce, ajouter à la liste
+    results[location].push(ad); // Nouvelle annonce, ajouter à la liste
     return true;
   });
 }
 
-function removeDeletedAdverts(adverts) {
-  const initialCount = results.length;
-  const updatedResults = results.filter((result) =>
+function removeDeletedAdverts(adverts, location) {
+  const initialCount = results[location].length;
+  const updatedResults = results[location].filter((result) =>
     adverts.some((ad) => ad.link === result.link)
   );
-  results.length = 0;
-  results.push(...updatedResults);
-  const updatedCount = results.length;
+  results[location].length = 0;
+  results[location].push(...updatedResults);
+  const updatedCount = results[location].length;
   if (initialCount > updatedCount) {
     console.log(`🗑️ ${initialCount - updatedCount} annonces supprimées.`);
   }
@@ -282,17 +287,20 @@ async function displayResults(channel, adverts) {
 
 export async function startAutoScrapingJobs(channel, location) {
   if (scraping[location].isActive) {
-    await channel.send("⚠️ **Le scraping automatique est déjà en cours !**");
+    // await channel.send("⚠️ **Le scraping automatique est déjà en cours !**");
     return;
   }
 
   scraping[location].isActive = true;
 
   // Obtenir les noms uniques des sites
-  const uniqueSites = [...new Set(siteConfigs
-    .filter(config => config.location === location)
-    .map(config => config.name)
-  )];
+  const uniqueSites = [
+    ...new Set(
+      siteConfigs
+        .filter((config) => config.location === location)
+        .map((config) => config.name)
+    ),
+  ];
 
   await channel.send(`
 🚀 **Démarrage du scraping automatique !**
@@ -325,7 +333,7 @@ export async function stopAutoScrapingJobs(channel, location) {
   await channel.send("🛑 **Scraping automatique arrêté.**");
 }
 
-export async function scrapJobsDebug() {
+export async function scrapJobsDebug(location) {
   console.log("🔄 Démarrage du scraping...");
   let browserInstance;
   try {
@@ -334,7 +342,9 @@ export async function scrapJobsDebug() {
 
     const allAdverts = [];
 
-    for (const config of siteConfigs) {
+    for (const config of siteConfigs.filter(
+      (site) => site.location === location
+    )) {
       try {
         const page = await browser.newPage();
 
@@ -353,21 +363,21 @@ export async function scrapJobsDebug() {
           const adverts = await getAdverts(page, config);
           allAdverts.push(...adverts);
           pageNumber++;
-        } while (pageNumber <= 9);
+        } while (pageNumber <= 5);
 
         await page.close();
       } catch (error) {
-        console.error(
+        console.log(
           `❌ Erreur lors du scraping de ${config.name}: ${error.message}`
         );
       }
     }
 
-    removeDeletedAdverts(allAdverts);
-    const newAdverts = filterAdverts(allAdverts);
+    removeDeletedAdverts(allAdverts, location);
+    const newAdverts = filterAdverts(allAdverts, location);
     await displayResultsDebug(newAdverts);
   } catch (error) {
-    await console.log(`❌ **Erreur lors du scraping:** ${error.message}`);
+    console.log(`❌ **Erreur lors du scraping:** ${error.message}`);
   } finally {
     if (browserInstance) {
       await browserInstance.close();
