@@ -144,8 +144,8 @@ export async function scrapJobs(channel, location) {
       }
     }
 
-    removeDeletedAdverts(allAdverts);
-    const newAdverts = filterAdverts(allAdverts);
+    removeDeletedAdverts(allAdverts, location);
+    const newAdverts = filterAdverts(allAdverts, location);
     await displayResults(channel, newAdverts);
   } catch (error) {
     await channel.send(`❌ **Erreur lors du scraping:** ${error.message}`);
