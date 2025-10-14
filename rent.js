@@ -8,7 +8,7 @@ const siteConfigs = [
   {
     name: "SeLoger",
     url: new URL(
-      "https://www.seloger.com/classified-search?distributionTypes=Rent&estateTypes=House,Apartment&locations=POCOFR4448&numberOfBedroomsMin=1&numberOfRoomsMin=2&priceMax=1300&spaceMin=55"
+      "https://www.seloger.com/classified-search?distributionTypes=Rent&estateTypes=House,Apartment&furnished=Full&locations=POCOFR4451,POCOFR4446,POCOFR4447&priceMax=700&spaceMin=20&order=DateDesc"
     ),
     selectors: {
       card: '[data-testid="serp-core-classified-card-testid"]',
@@ -19,7 +19,7 @@ const siteConfigs = [
   {
     name: "Bienici",
     url: new URL(
-      "https://www.bienici.com/recherche/location/lyon-4e-69004/2-pieces-et-plus?prix-max=1300&mode=liste"
+      "https://www.bienici.com/recherche/location/lyon-3e-69003,lyon-7e-69007,lyon-2e-69002?prix-max=700&surface-min=20&meuble=oui&mode=liste&tri=publication-desc"
     ),
     selectors: {
       card: "article.search-results-list__ad-overview",
@@ -27,7 +27,7 @@ const siteConfigs = [
       title: ".ad-overview-details__ad-title",
       price: ".ad-price__the-price",
     },
-  },
+  }
 ];
 
 const results = []; // Pour stocker les résultats des annonces
