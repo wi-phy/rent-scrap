@@ -8,7 +8,7 @@ const siteConfigs = [
   {
     name: "SeLoger",
     url: new URL(
-      "https://www.seloger.com/classified-search?distributionTypes=Rent&estateTypes=House,Apartment&furnished=Full&locations=POCOFR4451,POCOFR4446,POCOFR4447&priceMax=700&spaceMin=20&order=DateDesc"
+      "https://www.seloger.com/classified-search?classifiedBusiness=Professional&distributionTypes=Rent&estateTypes=House,Apartment&furnished=Full&locations=POCOFR4451,POCOFR4446,POCOFR4447&priceMax=700&projectTypes=Stock&spaceMin=20&order=DateDesc"
     ),
     selectors: {
       card: '[data-testid="serp-core-classified-card-testid"]',
