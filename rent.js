@@ -8,18 +8,19 @@ const siteConfigs = [
   {
     name: "SeLoger",
     url: new URL(
-      "https://www.seloger.com/classified-search?classifiedBusiness=Professional&distributionTypes=Rent&estateTypes=House,Apartment&furnished=Full&locations=POCOFR4451,POCOFR4446,POCOFR4447&priceMax=700&projectTypes=Stock&spaceMin=20&order=DateDesc"
+      "https://www.seloger.com/classified-search?classifiedBusiness=Professional&distributionTypes=Rent&estateTypes=House,Apartment&furnished=Full&locations=POCOFR4451,POCOFR4446,POCOFR4447,POCOFR4445,POCOFR4448,POCOFR4450,POCOFR4452&priceMax=700&projectTypes=Stock&spaceMin=20&order=DateDesc"
     ),
     selectors: {
       card: '[data-testid="serp-core-classified-card-testid"]',
       link: "a[href]",
       title: "a[title]",
     },
+    blacklist: ["ALLO APPART", "MY APPART", "LocService", "123 LOGER"],
   },
   {
     name: "Bienici",
     url: new URL(
-      "https://www.bienici.com/recherche/location/lyon-3e-69003,lyon-7e-69007,lyon-2e-69002?prix-max=700&surface-min=20&meuble=oui&mode=liste&tri=publication-desc"
+      "https://www.bienici.com/recherche/location/lyon-3e-69003,lyon-7e-69007,lyon-2e-69002,lyon-1er-69001,lyon-4e-69004,lyon-6e-69006,lyon-8e-69008?prix-max=700&surface-min=20&meuble=oui&mode=liste&tri=publication-desc"
     ),
     selectors: {
       card: "article.search-results-list__ad-overview",
@@ -27,7 +28,7 @@ const siteConfigs = [
       title: ".ad-overview-details__ad-title",
       price: ".ad-price__the-price",
     },
-  }
+  },
 ];
 
 const results = []; // Pour stocker les résultats des annonces
@@ -71,11 +72,19 @@ async function getAdverts(page, config) {
   return await page.evaluate(
     (configData) => {
       function extractTitleLinkSeLoger(card, configData) {
+        const agencyElement = card.querySelector(".css-1tafjuz");
+        const agency = agencyElement ? agencyElement.textContent.trim() : "";
+        if (configData.blacklist.includes(agency)) {
+          return null; // Ignorer cette annonce
+        }
+
         const titleElement = card.querySelector(configData.selectors.title);
-        title = titleElement ? titleElement.getAttribute("title") : "";
+        const title = titleElement
+          ? titleElement.getAttribute("title") + " - " + agency
+          : "";
 
         const linkElement = card.querySelector(configData.selectors.link);
-        link = linkElement ? linkElement.href : "";
+        let link = linkElement ? linkElement.href : "";
 
         if (link) {
           link = `${link.split("?")[0]}`;
@@ -93,10 +102,10 @@ async function getAdverts(page, config) {
         );
         const titleText = titleElement ? titleElement.textContent?.trim() : "";
         const priceText = priceElement ? priceElement.textContent?.trim() : "";
-        title = priceText + " - " + titleText;
+        const title = priceText + " - " + titleText;
 
         const linkElement = card.querySelector(configData.selectors.link);
-        link = linkElement ? linkElement.href : "";
+        let link = linkElement ? linkElement.href : "";
 
         if (link) {
           link = `${link.split("?")[0]}`;
@@ -123,11 +132,13 @@ async function getAdverts(page, config) {
             break;
         }
 
-        newResults.push({
-          title: data.title,
-          link: data.link,
-          source: configData.name,
-        });
+        if (data) {
+          newResults.push({
+            title: data.title,
+            link: data.link,
+            source: configData.name,
+          });
+        }
       });
 
       return newResults;
@@ -136,6 +147,7 @@ async function getAdverts(page, config) {
       name: config.name,
       baseUrl: config.baseUrl,
       selectors: config.selectors,
+      blacklist: config.blacklist,
     }
   );
 }
