@@ -2,11 +2,11 @@ import { initBrowser, configurePage } from "./browser.js";
 
 let scraping = {
   nice: {
-    interval: null,
+    timeout: null,
     isActive: false,
   },
   lyon: {
-    interval: null,
+    timeout: null,
     isActive: false,
   },
 };
@@ -119,22 +119,15 @@ export async function scrapJobs(channel, location) {
       try {
         const page = await browser.newPage();
 
-        let pageNumber = 1;
-
-        do {
-          const isPageConfigured = await configurePage(
-            page,
-            config,
-            pageNumber
-          );
-          if (!isPageConfigured) {
-            console.log(`Plus de pages à scraper sur ${config.name}`);
-            break;
-          }
+        const isPageConfigured = await configurePage(
+          page,
+          config,
+          1
+        );
+        if (isPageConfigured) {
           const adverts = await getAdverts(page, config);
           allAdverts.push(...adverts);
-          pageNumber++;
-        } while (pageNumber <= 5);
+        }
 
         await page.close();
       } catch (error) {
@@ -221,6 +214,13 @@ async function getAdverts(page, config) {
 
         if (data.salary.includes("heure")) return;
 
+        // Filter out adverts with excluded keywords in title
+        const excludedKeywords = ["santé", "médecin", "medecin", "infirmier", "medical"];
+        const titleLower = (data.title || "").toLowerCase();
+        if (excludedKeywords.some(keyword => titleLower.includes(keyword.toLowerCase()))) {
+          return;
+        }
+
         newResults.push({ ...data });
       });
 
@@ -285,6 +285,63 @@ async function displayResults(channel, adverts) {
   }
 }
 
+// Helper function to get current hour in GMT+1
+function getCurrentHourGMT1() {
+  const now = new Date();
+  // Get UTC time and add 1 hour for GMT+1
+  const gmt1Hour = now.getUTCHours() + 1;
+  return gmt1Hour >= 24 ? gmt1Hour - 24 : gmt1Hour;
+}
+
+// Helper function to get current day of week in GMT+1 (0 = Sunday, 6 = Saturday)
+function getCurrentDayGMT1() {
+  const now = new Date();
+  // Get UTC day and adjust for GMT+1 timezone
+  // Create a date object in GMT+1 timezone
+  const gmt1Date = new Date(now.toLocaleString("en-US", { timeZone: "Europe/Paris" }));
+  return gmt1Date.getDay();
+}
+
+// Helper function to check if it's weekend (Saturday or Sunday)
+function isWeekend() {
+  const day = getCurrentDayGMT1();
+  return day === 0 || day === 6; // 0 = Sunday, 6 = Saturday
+}
+
+// Helper function to check if it's day time (8h - 18h GMT+1)
+function isDayTime() {
+  const hour = getCurrentHourGMT1();
+  return hour >= 8 && hour < 18;
+}
+
+// Helper function to calculate next interval in milliseconds
+function getNextInterval() {
+  if (isWeekend()) {
+    // Weekend: check every 8 hours
+    return 8 * 60 * 60 * 1000; // 8 hours
+  } else if (isDayTime()) {
+    // Day time: check every 2 hours
+    return 2 * 60 * 60 * 1000; // 2 hours
+  } else {
+    // Night time: check every 7 hours
+    return 7 * 60 * 60 * 1000; // 7 hours
+  }
+}
+
+// Schedule next scraping run
+function scheduleNextScraping(channel, location) {
+  if (!scraping[location].isActive) {
+    return;
+  }
+
+  const interval = getNextInterval();
+
+  scraping[location].timeout = setTimeout(async () => {
+    await scrapJobs(channel, location);
+    scheduleNextScraping(channel, location);
+  }, interval);
+}
+
 export async function startAutoScrapingJobs(channel, location) {
   if (scraping[location].isActive) {
     // await channel.send("⚠️ **Le scraping automatique est déjà en cours !**");
@@ -305,16 +362,18 @@ export async function startAutoScrapingJobs(channel, location) {
   await channel.send(`
 🚀 **Démarrage du scraping automatique !**
 🌐 **Sites surveillés:** ${uniqueSites.join(", ")}
+⏰ **Fréquence:** 
+   - Week-end (Samedi/Dimanche): Toutes les 8h
+   - Journée (8h-18h GMT+1): Toutes les 2h
+   - Nuit (18h-8h GMT+1): Toutes les 7h
 💡 **Utilisez \`!stopjobs${location}\` pour arrêter le scraping automatique.**
   `);
 
   // Premier scraping immédiat
   await scrapJobs(channel, location);
 
-  // Programmer les scraping suivants toutes les heures
-  scraping[location].interval = setInterval(async () => {
-    await scrapJobs(channel, location);
-  }, 60 * 60 * 1000); // 1 heure
+  // Programmer les scraping suivants avec intervalles dynamiques
+  scheduleNextScraping(channel, location);
 }
 
 export async function stopAutoScrapingJobs(channel, location) {
@@ -323,9 +382,9 @@ export async function stopAutoScrapingJobs(channel, location) {
     return;
   }
 
-  if (scraping[location].interval) {
-    clearInterval(scraping[location].interval);
-    scraping[location].interval = null;
+  if (scraping[location].timeout) {
+    clearTimeout(scraping[location].timeout);
+    scraping[location].timeout = null;
   }
 
   scraping[location].isActive = false;
@@ -348,22 +407,15 @@ export async function scrapJobsDebug(location) {
       try {
         const page = await browser.newPage();
 
-        let pageNumber = 1;
-
-        do {
-          const isPageConfigured = await configurePage(
-            page,
-            config,
-            pageNumber
-          );
-          if (!isPageConfigured) {
-            console.log(`Plus de pages à scraper sur ${config.name}`);
-            break;
-          }
+        const isPageConfigured = await configurePage(
+          page,
+          config,
+          1
+        );
+        if (isPageConfigured) {
           const adverts = await getAdverts(page, config);
           allAdverts.push(...adverts);
-          pageNumber++;
-        } while (pageNumber <= 5);
+        }
 
         await page.close();
       } catch (error) {
