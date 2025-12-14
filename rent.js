@@ -8,7 +8,7 @@ const siteConfigs = [
   {
     name: "SeLoger",
     url: new URL(
-      "https://www.seloger.com/classified-search?classifiedBusiness=Professional&distributionTypes=Rent&estateTypes=House,Apartment&furnished=Full&locations=POCOFR4451,POCOFR4446,POCOFR4447,POCOFR4445,POCOFR4448,POCOFR4450,POCOFR4452&priceMax=700&projectTypes=Stock&spaceMin=20&order=DateDesc"
+      "https://www.seloger.com/classified-search?classifiedBusiness=Professional&distributionTypes=Rent&estateTypes=House,Apartment&featuresIncluded=Parking_Garage,Balcony_Terrace&furnished=No,Not_Applicable&locations=POCOFR4451,POCOFR4446,POCOFR4447,POCOFR4445,POCOFR4448,POCOFR4450,POCOFR4452&numberOfRoomsMin=2&priceMax=1100&projectTypes=Stock&spaceMin=50&order=DateDesc"
     ),
     selectors: {
       card: '[data-testid="serp-core-classified-card-testid"]',
@@ -20,7 +20,7 @@ const siteConfigs = [
   {
     name: "Bienici",
     url: new URL(
-      "https://www.bienici.com/recherche/location/lyon-3e-69003,lyon-7e-69007,lyon-2e-69002,lyon-1er-69001,lyon-4e-69004,lyon-6e-69006,lyon-8e-69008?prix-max=700&surface-min=20&meuble=oui&mode=liste&tri=publication-desc"
+      "https://www.bienici.com/recherche/location/lyon-3e-69003,lyon-7e-69007,lyon-2e-69002,lyon-1er-69001,lyon-4e-69004,lyon-6e-69006,lyon-8e-69008/maisonvilla,appartement/2-pieces-et-plus?prix-max=1100&surface-min=50&balcon-ou-terrasse=oui&parking=oui&mode=liste&tri=publication-desc"
     ),
     selectors: {
       card: "article.search-results-list__ad-overview",
