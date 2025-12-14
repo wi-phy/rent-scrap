@@ -62,16 +62,6 @@ function startBot() {
     if (message.content === "!stopjobsnice") {
       await stopAutoScrapingJobs(message.channel, "nice");
     }
-
-    if (message.content === "!status") {
-      if (scrapingActive) {
-        await message.channel.send(
-          "✅ **Scraping automatique ACTIF** - prochain scraping dans < 15 minutes"
-        );
-      } else {
-        await message.channel.send("❌ **Scraping automatique INACTIF**");
-      }
-    }
   });
 }
 
@@ -79,4 +69,4 @@ startBot();
 
 client.login(process.env.DISCORD_TOKEN);
 
-// scrapJobsDebug();
+// scrapDebug();
